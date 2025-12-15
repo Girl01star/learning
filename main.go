@@ -7,32 +7,38 @@ import (
 )
 
 func main() {
-	doc1 := &documentstore.Document{
+	store := documentstore.NewStore()
+
+	created, users := store.CreateCollection("users", &documentstore.CollectionConfig{
+		PrimaryKey: "key",
+	})
+	fmt.Println("created:", created)
+
+	doc1 := documentstore.Document{
 		Fields: map[string]documentstore.DocumentField{
 			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_1"},
 			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Alina"},
-			"age":  {Type: documentstore.DocumentFieldTypeNumber, Value: 26},
 		},
 	}
 
-	doc2 := &documentstore.Document{
+	doc2 := documentstore.Document{
 		Fields: map[string]documentstore.DocumentField{
-			"key":    {Type: documentstore.DocumentFieldTypeString, Value: "user_2"},
-			"active": {Type: documentstore.DocumentFieldTypeBool, Value: true},
+			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_2"},
+			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Bogdan"},
 		},
 	}
 
-	documentstore.Put(doc1)
-	documentstore.Put(doc2)
+	users.Put(doc1)
+	users.Put(doc2)
 
 	fmt.Println("LIST:")
-	for _, d := range documentstore.List() {
-		fmt.Println(" - key =", d.Fields["key"].Value)
+	for _, d := range users.List() {
+		fmt.Println("-", d.Fields["key"].Value, d.Fields["name"].Value)
 	}
 
-	deleted := documentstore.Delete("user_2")
+	deleted := users.Delete("user_2")
 	fmt.Println("DELETE user_2 ->", deleted)
 
-	_, ok := documentstore.Get("user_2")
+	_, ok := users.Get("user_2")
 	fmt.Println("GET user_2 after delete ->", ok)
 }
