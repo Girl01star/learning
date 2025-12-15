@@ -21,12 +21,12 @@ func newCollection(cfg *CollectionConfig) *Collection {
 	}
 }
 
-func (s *Collection) Put(doc Document) {
+func (c *Collection) Put(doc Document) {
 	if doc.Fields == nil {
 		return
 	}
 
-	f, ok := doc.Fields[s.cfg.PrimaryKey]
+	f, ok := doc.Fields[c.cfg.PrimaryKey]
 	if !ok {
 		return
 	}
@@ -40,11 +40,11 @@ func (s *Collection) Put(doc Document) {
 		return
 	}
 
-	s.docs[key] = doc
+	c.docs[key] = doc
 }
 
-func (s *Collection) Get(key string) (*Document, bool) {
-	doc, ok := s.docs[key]
+func (c *Collection) Get(key string) (*Document, bool) {
+	doc, ok := c.docs[key]
 	if !ok {
 		return nil, false
 	}
@@ -52,18 +52,20 @@ func (s *Collection) Get(key string) (*Document, bool) {
 	return &copyDoc, true
 }
 
-func (s *Collection) Delete(key string) bool {
-	if _, ok := s.docs[key]; !ok {
+func (c *Collection) Delete(key string) bool {
+	if _, ok := c.docs[key]; !ok {
 		return false
 	}
-	delete(s.docs, key)
+
+	delete(c.docs, key)
 	return true
 }
 
-func (s *Collection) List() []Document {
-	res := make([]Document, 0, len(s.docs))
-	for _, d := range s.docs {
+func (c *Collection) List() []Document {
+	res := make([]Document, 0, len(c.docs))
+	for _, d := range c.docs {
 		res = append(res, d)
 	}
+
 	return res
 }
