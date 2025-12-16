@@ -1,4 +1,4 @@
-package lesson_02
+package main
 
 import (
 	"strconv"
