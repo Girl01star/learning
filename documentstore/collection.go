@@ -21,44 +21,40 @@ func newCollection(cfg *CollectionConfig) *Collection {
 	}
 }
 
-func (c *Collection) Put(doc Document) {
+func (c *Collection) Put(doc Document) error {
 	if doc.Fields == nil {
-		return
+		return ErrInvalidPrimaryKey
 	}
 
 	f, ok := doc.Fields[c.cfg.PrimaryKey]
-	if !ok {
-		return
-	}
-
-	if f.Type != DocumentFieldTypeString {
-		return
+	if !ok || f.Type != DocumentFieldTypeString {
+		return ErrInvalidPrimaryKey
 	}
 
 	key, ok := f.Value.(string)
 	if !ok || key == "" {
-		return
+		return ErrInvalidPrimaryKey
 	}
 
 	c.docs[key] = doc
+	return nil
 }
 
-func (c *Collection) Get(key string) (*Document, bool) {
+func (c *Collection) Get(key string) (*Document, error) {
 	doc, ok := c.docs[key]
 	if !ok {
-		return nil, false
+		return nil, ErrDocumentNotFound
 	}
 	copyDoc := doc
-	return &copyDoc, true
+	return &copyDoc, nil
 }
 
-func (c *Collection) Delete(key string) bool {
+func (c *Collection) Delete(key string) error {
 	if _, ok := c.docs[key]; !ok {
-		return false
+		return ErrDocumentNotFound
 	}
-
 	delete(c.docs, key)
-	return true
+	return nil
 }
 
 func (c *Collection) List() []Document {
