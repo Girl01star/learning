@@ -1,23 +1,27 @@
 package documentstore
 
 type Collection struct {
-	cfg  CollectionConfig
-	docs map[string]Document
+	cfg        CollectionConfig
+	docs       map[string]Document
+	store      *Store
+	collection string
 }
 
 type CollectionConfig struct {
 	PrimaryKey string
 }
 
-func newCollection(cfg *CollectionConfig) *Collection {
+func newCollection(cfg *CollectionConfig, store *Store, name string) *Collection {
 	realCfg := CollectionConfig{PrimaryKey: "id"}
 	if cfg != nil && cfg.PrimaryKey != "" {
 		realCfg.PrimaryKey = cfg.PrimaryKey
 	}
 
 	return &Collection{
-		cfg:  realCfg,
-		docs: make(map[string]Document),
+		cfg:        realCfg,
+		docs:       make(map[string]Document),
+		store:      store,
+		collection: name,
 	}
 }
 
@@ -36,7 +40,22 @@ func (c *Collection) Put(doc Document) error {
 		return ErrInvalidPrimaryKey
 	}
 
+	_, existed := c.docs[key]
 	c.docs[key] = doc
+
+	if c.store != nil {
+		action := LogDocumentCreate
+		if existed {
+			action = LogDocumentUpdate
+		}
+		c.store.addLog(LogEntry{
+			At:         now(),
+			Action:     action,
+			Collection: c.collection,
+			Key:        key,
+		})
+	}
+
 	return nil
 }
 
@@ -54,6 +73,15 @@ func (c *Collection) Delete(key string) error {
 		return ErrDocumentNotFound
 	}
 	delete(c.docs, key)
+
+	if c.store != nil {
+		c.store.addLog(LogEntry{
+			At:         now(),
+			Action:     LogDocumentDelete,
+			Collection: c.collection,
+			Key:        key,
+		})
+	}
 	return nil
 }
 
