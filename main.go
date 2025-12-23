@@ -3,42 +3,27 @@ package main
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/Girl01star/learning/documentstore"
+	"github.com/Girl01star/learning/users"
 )
 
 func main() {
 	store := documentstore.NewStore()
-
-	created, users := store.CreateCollection("users", &documentstore.CollectionConfig{
-		PrimaryKey: "key",
-	})
-	fmt.Println("created:", created)
-
-	doc1 := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_1"},
-			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Alina"},
-		},
+	cfg := documentstore.CollectionConfig{PrimaryKey: "<generated_primary_key>"}
+	coll, err := store.CreateCollection("users", &cfg)
+	if err != nil {
+		fmt.Println(errors.Wrap(err, "failed to create collection"))
+		return
 	}
-
-	doc2 := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_2"},
-			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Bogdan"},
-		},
+	service := users.NewService(coll)
+	user, err := service.CreateUser("<genareted_id>", "Bogdan")
+	if err != nil {
+		fmt.Println(errors.Wrap(err, "failed to create user"))
+		return
 	}
+	fmt.Println(user)
+	fmt.Println(service.ListUsers())
 
-	users.Put(doc1)
-	users.Put(doc2)
-
-	fmt.Println("LIST:")
-	for _, d := range users.List() {
-		fmt.Println("-", d.Fields["key"].Value, d.Fields["name"].Value)
-	}
-
-	deleted := users.Delete("user_2")
-	fmt.Println("DELETE user_2 ->", deleted)
-
-	_, ok := users.Get("user_2")
-	fmt.Println("GET user_2 after delete ->", ok)
 }
