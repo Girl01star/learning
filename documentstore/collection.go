@@ -1,12 +1,15 @@
 package documentstore
 
+type CollectionConfig struct {
+	PrimaryKey string
+}
+
 type Collection struct {
 	cfg  CollectionConfig
 	docs map[string]Document
-}
 
-type CollectionConfig struct {
-	PrimaryKey string
+	store *Store
+	name  string
 }
 
 func newCollection(cfg *CollectionConfig) *Collection {
@@ -21,44 +24,52 @@ func newCollection(cfg *CollectionConfig) *Collection {
 	}
 }
 
-func (c *Collection) Put(doc Document) {
-	if doc.Fields == nil {
-		return
-	}
-
+func (c *Collection) Put(doc Document) error {
 	f, ok := doc.Fields[c.cfg.PrimaryKey]
-	if !ok {
-		return
-	}
-
-	if f.Type != DocumentFieldTypeString {
-		return
+	if !ok || f.Type != DocumentFieldTypeString {
+		return ErrInvalidPrimaryKey
 	}
 
 	key, ok := f.Value.(string)
 	if !ok || key == "" {
-		return
+		return ErrInvalidPrimaryKey
 	}
 
+	_, existed := c.docs[key]
 	c.docs[key] = doc
+
+	if c.store != nil {
+		if existed {
+			c.store.addLog(LogDocumentUpdate, c.name, key)
+		} else {
+			c.store.addLog(LogDocumentCreate, c.name, key)
+		}
+	}
+
+	return nil
 }
 
-func (c *Collection) Get(key string) (*Document, bool) {
+func (c *Collection) Get(key string) (*Document, error) {
 	doc, ok := c.docs[key]
 	if !ok {
-		return nil, false
+		return nil, ErrDocumentNotFound
 	}
 	copyDoc := doc
-	return &copyDoc, true
+	return &copyDoc, nil
 }
 
-func (c *Collection) Delete(key string) bool {
+func (c *Collection) Delete(key string) error {
 	if _, ok := c.docs[key]; !ok {
-		return false
+		return ErrDocumentNotFound
 	}
 
 	delete(c.docs, key)
-	return true
+
+	if c.store != nil {
+		c.store.addLog(LogDocumentDelete, c.name, key)
+	}
+
+	return nil
 }
 
 func (c *Collection) List() []Document {
@@ -66,6 +77,5 @@ func (c *Collection) List() []Document {
 	for _, d := range c.docs {
 		res = append(res, d)
 	}
-
 	return res
 }
