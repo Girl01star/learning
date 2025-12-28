@@ -7,10 +7,9 @@ type LogAction string
 const (
 	LogCollectionCreate LogAction = "collection.create"
 	LogCollectionDelete LogAction = "collection.delete"
-
-	LogDocumentCreate LogAction = "document.create"
-	LogDocumentUpdate LogAction = "document.update"
-	LogDocumentDelete LogAction = "document.delete"
+	LogDocumentCreate   LogAction = "document.create"
+	LogDocumentUpdate   LogAction = "document.update"
+	LogDocumentDelete   LogAction = "document.delete"
 )
 
 type LogEntry struct {
@@ -20,8 +19,13 @@ type LogEntry struct {
 	Key        string    `json:"key,omitempty"`
 }
 
-func (s *Store) addLog(e LogEntry) {
-	s.logs = append(s.logs, e)
+func (s *Store) addLog(action LogAction, collection, key string) {
+	s.logs = append(s.logs, LogEntry{
+		At:         time.Now(),
+		Action:     action,
+		Collection: collection,
+		Key:        key,
+	})
 }
 
 func (s *Store) Logs() []LogEntry {

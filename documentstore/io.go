@@ -6,8 +6,8 @@ import (
 )
 
 type dumpCollection struct {
-	Config CollectionConfig    `json:"config"`
-	Docs   map[string]Document `json:"docs"`
+	Cfg  CollectionConfig    `json:"cfg"`
+	Docs map[string]Document `json:"docs"`
 }
 
 type dumpStore struct {
@@ -15,30 +15,27 @@ type dumpStore struct {
 	Logs        []LogEntry                `json:"logs"`
 }
 
-// Dump() -> []byte
 func (s *Store) Dump() ([]byte, error) {
 	ds := dumpStore{
-		Collections: make(map[string]dumpCollection, len(s.collections)),
+		Collections: make(map[string]dumpCollection),
 		Logs:        s.Logs(),
 	}
 
 	for name, col := range s.collections {
-		// копия docs
-		docsCopy := make(map[string]Document, len(col.docs))
+		docsCopy := make(map[string]Document)
 		for k, v := range col.docs {
 			docsCopy[k] = v
 		}
 
 		ds.Collections[name] = dumpCollection{
-			Config: col.cfg,
-			Docs:   docsCopy,
+			Cfg:  col.cfg,
+			Docs: docsCopy,
 		}
 	}
 
 	return json.Marshal(ds)
 }
 
-// NewStoreFromDump(dump []byte)
 func NewStoreFromDump(dump []byte) (*Store, error) {
 	var ds dumpStore
 	if err := json.Unmarshal(dump, &ds); err != nil {
@@ -46,23 +43,23 @@ func NewStoreFromDump(dump []byte) (*Store, error) {
 	}
 
 	st := NewStore()
-	if ds.Logs != nil {
-		st.logs = append(st.logs, ds.Logs...)
-	}
+	st.logs = append(st.logs, ds.Logs...)
 
 	for name, dc := range ds.Collections {
-		col := newCollection(&dc.Config, st, name)
-		// поднимаем документы
+		col := newCollection(&dc.Cfg)
+		col.store = st
+		col.name = name
+
 		for k, v := range dc.Docs {
 			col.docs[k] = v
 		}
+
 		st.collections[name] = col
 	}
 
 	return st, nil
 }
 
-// NewStoreFromFile(filename)
 func NewStoreFromFile(filename string) (*Store, error) {
 	b, err := os.ReadFile(filename)
 	if err != nil {
@@ -71,11 +68,10 @@ func NewStoreFromFile(filename string) (*Store, error) {
 	return NewStoreFromDump(b)
 }
 
-// DumpToFile(filename)
 func (s *Store) DumpToFile(filename string) error {
 	b, err := s.Dump()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filename, b, 0o644)
+	return os.WriteFile(filename, b, 0644)
 }

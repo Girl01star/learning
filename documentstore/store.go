@@ -1,9 +1,5 @@
 package documentstore
 
-import "time"
-
-func now() time.Time { return time.Now() }
-
 type Store struct {
 	collections map[string]*Collection
 	logs        []LogEntry
@@ -18,20 +14,20 @@ func NewStore() *Store {
 
 func (s *Store) CreateCollection(name string, cfg *CollectionConfig) (*Collection, error) {
 	if name == "" {
-		return nil, ErrCollectionNotFound
+		return nil, ErrInvalidCollectionName
 	}
+
 	if _, exists := s.collections[name]; exists {
 		return nil, ErrCollectionAlreadyExists
 	}
 
-	col := newCollection(cfg, s, name)
-	s.collections[name] = col
+	col := newCollection(cfg)
+	col.store = s
+	col.name = name
 
-	s.addLog(LogEntry{
-		At:         now(),
-		Action:     LogCollectionCreate,
-		Collection: name,
-	})
+	s.collections[name] = col
+	s.addLog(LogCollectionCreate, name, "")
+
 	return col, nil
 }
 
@@ -47,12 +43,9 @@ func (s *Store) DeleteCollection(name string) error {
 	if _, ok := s.collections[name]; !ok {
 		return ErrCollectionNotFound
 	}
-	delete(s.collections, name)
 
-	s.addLog(LogEntry{
-		At:         now(),
-		Action:     LogCollectionDelete,
-		Collection: name,
-	})
+	delete(s.collections, name)
+	s.addLog(LogCollectionDelete, name, "")
+
 	return nil
 }

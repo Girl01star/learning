@@ -1,35 +1,30 @@
 package documentstore
 
-type Collection struct {
-	cfg        CollectionConfig
-	docs       map[string]Document
-	store      *Store
-	collection string
-}
-
 type CollectionConfig struct {
 	PrimaryKey string
 }
 
-func newCollection(cfg *CollectionConfig, store *Store, name string) *Collection {
+type Collection struct {
+	cfg  CollectionConfig
+	docs map[string]Document
+
+	store *Store
+	name  string
+}
+
+func newCollection(cfg *CollectionConfig) *Collection {
 	realCfg := CollectionConfig{PrimaryKey: "id"}
 	if cfg != nil && cfg.PrimaryKey != "" {
 		realCfg.PrimaryKey = cfg.PrimaryKey
 	}
 
 	return &Collection{
-		cfg:        realCfg,
-		docs:       make(map[string]Document),
-		store:      store,
-		collection: name,
+		cfg:  realCfg,
+		docs: make(map[string]Document),
 	}
 }
 
 func (c *Collection) Put(doc Document) error {
-	if doc.Fields == nil {
-		return ErrInvalidPrimaryKey
-	}
-
 	f, ok := doc.Fields[c.cfg.PrimaryKey]
 	if !ok || f.Type != DocumentFieldTypeString {
 		return ErrInvalidPrimaryKey
@@ -44,16 +39,11 @@ func (c *Collection) Put(doc Document) error {
 	c.docs[key] = doc
 
 	if c.store != nil {
-		action := LogDocumentCreate
 		if existed {
-			action = LogDocumentUpdate
+			c.store.addLog(LogDocumentUpdate, c.name, key)
+		} else {
+			c.store.addLog(LogDocumentCreate, c.name, key)
 		}
-		c.store.addLog(LogEntry{
-			At:         now(),
-			Action:     action,
-			Collection: c.collection,
-			Key:        key,
-		})
 	}
 
 	return nil
@@ -72,16 +62,13 @@ func (c *Collection) Delete(key string) error {
 	if _, ok := c.docs[key]; !ok {
 		return ErrDocumentNotFound
 	}
+
 	delete(c.docs, key)
 
 	if c.store != nil {
-		c.store.addLog(LogEntry{
-			At:         now(),
-			Action:     LogDocumentDelete,
-			Collection: c.collection,
-			Key:        key,
-		})
+		c.store.addLog(LogDocumentDelete, c.name, key)
 	}
+
 	return nil
 }
 
@@ -90,6 +77,5 @@ func (c *Collection) List() []Document {
 	for _, d := range c.docs {
 		res = append(res, d)
 	}
-
 	return res
 }
