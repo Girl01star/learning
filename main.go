@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/Girl01star/learning/documentstore"
 )
@@ -9,36 +10,34 @@ import (
 func main() {
 	store := documentstore.NewStore()
 
-	created, users := store.CreateCollection("users", &documentstore.CollectionConfig{
-		PrimaryKey: "key",
+	users, err := store.CreateCollection("users", &documentstore.CollectionConfig{
+		PrimaryKey: "id",
 	})
-	fmt.Println("created:", created)
+	if err != nil {
+		log.Fatal("CreateCollection:", err)
+	}
 
-	doc1 := documentstore.Document{
+	err = users.Put(documentstore.Document{
 		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_1"},
+			"id":   {Type: documentstore.DocumentFieldTypeString, Value: "1"},
 			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Alina"},
 		},
+	})
+	if err != nil {
+		log.Fatal("Put:", err)
 	}
 
-	doc2 := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_2"},
-			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Bogdan"},
-		},
+	if err := store.DumpToFile("dump.json"); err != nil {
+		log.Fatal("DumpToFile:", err)
 	}
 
-	users.Put(doc1)
-	users.Put(doc2)
-
-	fmt.Println("LIST:")
-	for _, d := range users.List() {
-		fmt.Println("-", d.Fields["key"].Value, d.Fields["name"].Value)
+	newStore, err := documentstore.NewStoreFromFile("dump.json")
+	if err != nil {
+		log.Fatal("NewStoreFromFile:", err)
 	}
 
-	deleted := users.Delete("user_2")
-	fmt.Println("DELETE user_2 ->", deleted)
-
-	_, ok := users.Get("user_2")
-	fmt.Println("GET user_2 after delete ->", ok)
+	fmt.Println("Logs after restore:")
+	for _, l := range newStore.Logs() {
+		fmt.Println(l.Action, l.Collection, l.Key)
+	}
 }

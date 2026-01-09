@@ -1,0 +1,1 @@
+{"collections":{"users":{"cfg":{"PrimaryKey":"id"},"docs":{"1":{"Fields":{"id":{"Type":"string","Value":"1"},"name":{"Type":"string","Value":"Alina"}}}}}},"logs":[{"Type":"collection.create","Collection":"users","Key":"","Action":null},{"Type":"document.create","Collection":"users","Key":"1","Action":null}]}
