@@ -1,14 +1,19 @@
 package documentstore
 
+import "log/slog"
+
 type Store struct {
 	collections map[string]*Collection
 	logs        []LogEntry
+
+	logger *slog.Logger
 }
 
 func NewStore() *Store {
 	return &Store{
 		collections: make(map[string]*Collection),
 		logs:        make([]LogEntry, 0),
+		logger:      slog.Default(),
 	}
 }
 
@@ -48,4 +53,10 @@ func (s *Store) DeleteCollection(name string) error {
 	s.addLog(LogCollectionDelete, name, "")
 
 	return nil
+}
+func (s *Store) Logs() []LogEntry {
+
+	res := make([]LogEntry, len(s.logs))
+	copy(res, s.logs)
+	return res
 }

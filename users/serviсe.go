@@ -11,68 +11,91 @@ type User struct {
 	Name string `json:"name"`
 }
 
-type Service struct {
-	coll *documentstore.Collection
+type Collection interface {
+	Put(doc documentstore.Document) error
+	Get(key string) (*documentstore.Document, error)
+	Delete(key string) error
+	List() []documentstore.Document
 }
 
-func NewService(coll *documentstore.Collection) *Service {
+type Service struct {
+	coll Collection
+}
+
+func NewService(coll Collection) *Service {
 	return &Service{coll: coll}
 }
 
-func (s *Service) CreateUser(id, name string) (*User, error) {
-	u := &User{ID: id, Name: name}
+func (s *Service) Create(u User) error {
+	if u.ID == "" {
+		return errors.New("empty id")
+	}
 
-	doc, err := documentstore.MarshalDocument(u)
+	doc := documentstore.Document{
+		Fields: map[string]documentstore.DocumentField{
+			"id":   {Type: documentstore.DocumentFieldTypeString, Value: u.ID},
+			"name": {Type: documentstore.DocumentFieldTypeString, Value: u.Name},
+		},
+	}
+	return s.coll.Put(doc)
+}
+
+func (s *Service) Get(id string) (*User, error) {
+	doc, err := s.coll.Get(id)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = s.coll.Put(*doc); err != nil {
-		return nil, err
+	idField, ok := doc.Fields["id"]
+	if !ok {
+		return nil, documentstore.ErrUnsupportedDocumentField
+	}
+	nameField, ok := doc.Fields["name"]
+	if !ok {
+		return nil, documentstore.ErrUnsupportedDocumentField
 	}
 
-	return u, nil
+	idStr, ok := idField.Value.(string)
+	if !ok {
+		return nil, documentstore.ErrUnsupportedDocumentField
+	}
+	nameStr, ok := nameField.Value.(string)
+	if !ok {
+		return nil, documentstore.ErrUnsupportedDocumentField
+	}
+
+	return &User{ID: idStr, Name: nameStr}, nil
 }
 
-func (s *Service) ListUsers() ([]User, error) {
-	docs := s.coll.List()
+func (s *Service) Delete(id string) error {
+	return s.coll.Delete(id)
+}
 
+func (s *Service) List() ([]User, error) {
+	docs := s.coll.List()
 	res := make([]User, 0, len(docs))
-	for i := range docs {
-		var u User
-		if err := documentstore.UnmarshalDocument(&docs[i], &u); err != nil {
-			return nil, err
+
+	for _, d := range docs {
+		idField, ok := d.Fields["id"]
+		if !ok {
+			return nil, documentstore.ErrUnsupportedDocumentField
 		}
-		res = append(res, u)
+		nameField, ok := d.Fields["name"]
+		if !ok {
+			return nil, documentstore.ErrUnsupportedDocumentField
+		}
+
+		idStr, ok := idField.Value.(string)
+		if !ok {
+			return nil, documentstore.ErrUnsupportedDocumentField
+		}
+		nameStr, ok := nameField.Value.(string)
+		if !ok {
+			return nil, documentstore.ErrUnsupportedDocumentField
+		}
+
+		res = append(res, User{ID: idStr, Name: nameStr})
 	}
 
 	return res, nil
-}
-
-func (s *Service) GetUser(userID string) (*User, error) {
-	doc, err := s.coll.Get(userID)
-	if err != nil {
-		if errors.Is(err, documentstore.ErrDocumentNotFound) {
-			return nil, ErrUserNotFound
-		}
-		return nil, err
-	}
-
-	var u User
-	if err = documentstore.UnmarshalDocument(doc, &u); err != nil {
-		return nil, err
-	}
-
-	return &u, nil
-}
-
-func (s *Service) DeleteUser(userID string) error {
-	err := s.coll.Delete(userID)
-	if err != nil {
-		if errors.Is(err, documentstore.ErrDocumentNotFound) {
-			return ErrUserNotFound
-		}
-		return err
-	}
-	return nil
 }

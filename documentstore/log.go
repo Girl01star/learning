@@ -1,35 +1,41 @@
 package documentstore
 
-import "time"
+import "log/slog"
 
-type LogAction string
+type LogType string
 
 const (
-	LogCollectionCreate LogAction = "collection.create"
-	LogCollectionDelete LogAction = "collection.delete"
-	LogDocumentCreate   LogAction = "document.create"
-	LogDocumentUpdate   LogAction = "document.update"
-	LogDocumentDelete   LogAction = "document.delete"
+	LogCollectionCreate LogType = "collection.create"
+	LogCollectionDelete LogType = "collection.delete"
+
+	LogDocumentCreate LogType = "document.create"
+	LogDocumentUpdate LogType = "document.update"
+	LogDocumentDelete LogType = "document.delete"
 )
 
 type LogEntry struct {
-	At         time.Time `json:"at"`
-	Action     LogAction `json:"action"`
-	Collection string    `json:"collection"`
-	Key        string    `json:"key,omitempty"`
+	Type       LogType
+	Collection string
+	Key        string
+	Action     any
 }
 
-func (s *Store) addLog(action LogAction, collection, key string) {
-	s.logs = append(s.logs, LogEntry{
-		At:         time.Now(),
-		Action:     action,
+func (s *Store) addLog(t LogType, collection, key string) {
+	entry := LogEntry{
+		Type:       t,
 		Collection: collection,
 		Key:        key,
-	})
-}
+	}
+	s.logs = append(s.logs, entry)
 
-func (s *Store) Logs() []LogEntry {
-	out := make([]LogEntry, len(s.logs))
-	copy(out, s.logs)
-	return out
+	if s.logger == nil {
+		s.logger = slog.Default()
+	}
+
+	s.logger.Info(
+		"documentstore event",
+		slog.String("type", string(entry.Type)),
+		slog.String("collection", entry.Collection),
+		slog.String("key", entry.Key),
+	)
 }
