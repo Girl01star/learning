@@ -3,11 +3,13 @@ package documentstore
 import (
 	"encoding/json"
 	"os"
+	"sort"
 )
 
 type dumpCollection struct {
-	Cfg  CollectionConfig    `json:"cfg"`
-	Docs map[string]Document `json:"docs"`
+	Cfg           CollectionConfig    `json:"cfg"`
+	Docs          map[string]Document `json:"docs"`
+	IndexedFields []string            `json:"indexed_fields"`
 }
 
 type dumpStore struct {
@@ -27,9 +29,16 @@ func (s *Store) Dump() ([]byte, error) {
 			docsCopy[k] = v
 		}
 
+		indexed := make([]string, 0, len(col.indexes))
+		for fieldName := range col.indexes {
+			indexed = append(indexed, fieldName)
+		}
+		sort.Strings(indexed)
+
 		ds.Collections[name] = dumpCollection{
-			Cfg:  col.cfg,
-			Docs: docsCopy,
+			Cfg:           col.cfg,
+			Docs:          docsCopy,
+			IndexedFields: indexed,
 		}
 	}
 
@@ -52,6 +61,10 @@ func NewStoreFromDump(dump []byte) (*Store, error) {
 
 		for k, v := range dc.Docs {
 			col.docs[k] = v
+		}
+
+		for _, fieldName := range dc.IndexedFields {
+			_ = col.CreateIndex(fieldName)
 		}
 
 		st.collections[name] = col
