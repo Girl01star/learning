@@ -1,17 +1,21 @@
 package documentstore
 
+import "sync"
+
 type CollectionConfig struct {
 	PrimaryKey string
 }
 
 type Collection struct {
+	mu sync.RWMutex
+
 	cfg  CollectionConfig
 	docs map[string]Document
 
 	store *Store
 	name  string
 
-	indexes map[string]*Index // fieldName -> Index
+	indexes map[string]*Index
 }
 
 func newCollection(cfg *CollectionConfig) *Collection {
@@ -32,24 +36,29 @@ func (c *Collection) Put(doc Document) error {
 	if !ok || f.Type != DocumentFieldTypeString {
 		return ErrInvalidPrimaryKey
 	}
-
 	key, ok := f.Value.(string)
 	if !ok || key == "" {
 		return ErrInvalidPrimaryKey
 	}
 
-	var oldDoc *Document
-	if existing, existed := c.docs[key]; existed {
-		tmp := existing
-		oldDoc = &tmp
+	var existed bool
+	var old *Document
+
+	c.mu.Lock()
+	{
+		if prev, ok := c.docs[key]; ok {
+			existed = true
+			tmp := prev
+			old = &tmp
+		}
+		c.docs[key] = doc
+
+		c.reindexOnUpsertLocked(key, old, doc)
 	}
-
-	c.docs[key] = doc
-
-	c.reindexOnUpsert(key, oldDoc, doc)
+	c.mu.Unlock()
 
 	if c.store != nil {
-		if oldDoc != nil {
+		if existed {
 			c.store.addLog(LogDocumentUpdate, c.name, key)
 		} else {
 			c.store.addLog(LogDocumentCreate, c.name, key)
@@ -60,6 +69,9 @@ func (c *Collection) Put(doc Document) error {
 }
 
 func (c *Collection) Get(key string) (*Document, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	doc, ok := c.docs[key]
 	if !ok {
 		return nil, ErrDocumentNotFound
@@ -69,23 +81,32 @@ func (c *Collection) Get(key string) (*Document, error) {
 }
 
 func (c *Collection) Delete(key string) error {
-	doc, ok := c.docs[key]
-	if !ok {
-		return ErrDocumentNotFound
+	var old Document
+
+	c.mu.Lock()
+	{
+		doc, ok := c.docs[key]
+		if !ok {
+			c.mu.Unlock()
+			return ErrDocumentNotFound
+		}
+		old = doc
+		delete(c.docs, key)
+
+		c.reindexOnDeleteLocked(key, old)
 	}
-
-	c.reindexOnDelete(key, doc)
-
-	delete(c.docs, key)
+	c.mu.Unlock()
 
 	if c.store != nil {
 		c.store.addLog(LogDocumentDelete, c.name, key)
 	}
-
 	return nil
 }
 
 func (c *Collection) List() []Document {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	res := make([]Document, 0, len(c.docs))
 	for _, d := range c.docs {
 		res = append(res, d)
@@ -100,6 +121,9 @@ type QueryParams struct {
 }
 
 func (c *Collection) CreateIndex(fieldName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.indexes == nil {
 		c.indexes = make(map[string]*Index)
 	}
@@ -122,17 +146,24 @@ func (c *Collection) CreateIndex(fieldName string) error {
 }
 
 func (c *Collection) DeleteIndex(fieldName string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.indexes == nil {
 		return ErrIndexNotFound
 	}
 	if _, ok := c.indexes[fieldName]; !ok {
 		return ErrIndexNotFound
 	}
+
 	delete(c.indexes, fieldName)
 	return nil
 }
 
 func (c *Collection) Query(fieldName string, params QueryParams) ([]Document, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	idx, ok := c.indexes[fieldName]
 	if !ok {
 		return nil, ErrIndexNotFound
@@ -142,31 +173,26 @@ func (c *Collection) Query(fieldName string, params QueryParams) ([]Document, er
 
 	res := make([]Document, 0, len(keys))
 	for _, key := range keys {
-		doc, ok := c.docs[key]
-		if !ok {
-			continue
+		if doc, ok := c.docs[key]; ok {
+			res = append(res, doc)
 		}
-		res = append(res, doc)
 	}
 	return res, nil
 }
 
 func getStringField(doc Document, fieldName string) (string, bool) {
 	f, ok := doc.Fields[fieldName]
-	if !ok {
-		return "", false
-	}
-	if f.Type != DocumentFieldTypeString {
+	if !ok || f.Type != DocumentFieldTypeString {
 		return "", false
 	}
 	v, ok := f.Value.(string)
-	if !ok {
+	if !ok || v == "" {
 		return "", false
 	}
 	return v, true
 }
 
-func (c *Collection) reindexOnUpsert(key string, oldDoc *Document, newDoc Document) {
+func (c *Collection) reindexOnUpsertLocked(key string, oldDoc *Document, newDoc Document) {
 	if len(c.indexes) == 0 {
 		return
 	}
@@ -195,16 +221,14 @@ func (c *Collection) reindexOnUpsert(key string, oldDoc *Document, newDoc Docume
 	}
 }
 
-func (c *Collection) reindexOnDelete(key string, oldDoc Document) {
+func (c *Collection) reindexOnDeleteLocked(key string, oldDoc Document) {
 	if len(c.indexes) == 0 {
 		return
 	}
-
 	for fieldName, idx := range c.indexes {
 		oldVal, ok := getStringField(oldDoc, fieldName)
-		if !ok {
-			continue
+		if ok {
+			idx.Remove(oldVal, key)
 		}
-		idx.Remove(oldVal, key)
 	}
 }
