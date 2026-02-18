@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"sync"
 
 	"github.com/Girl01star/learning/documentstore"
 )
@@ -9,36 +11,37 @@ import (
 func main() {
 	store := documentstore.NewStore()
 
-	created, users := store.CreateCollection("users", &documentstore.CollectionConfig{
-		PrimaryKey: "key",
-	})
-	fmt.Println("created:", created)
-
-	doc1 := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_1"},
-			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Alina"},
-		},
+	col, err := store.CreateCollection("users", &documentstore.CollectionConfig{PrimaryKey: "id"})
+	if err != nil {
+		panic(err)
 	}
 
-	doc2 := documentstore.Document{
-		Fields: map[string]documentstore.DocumentField{
-			"key":  {Type: documentstore.DocumentFieldTypeString, Value: "user_2"},
-			"name": {Type: documentstore.DocumentFieldTypeString, Value: "Bogdan"},
-		},
+	var wg sync.WaitGroup
+	wg.Add(1000)
+
+	for i := 0; i < 1000; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+
+			id := strconv.Itoa(i)
+
+			_ = col.Put(documentstore.Document{
+				Fields: map[string]documentstore.DocumentField{
+					"id":   {Type: documentstore.DocumentFieldTypeString, Value: id},
+					"name": {Type: documentstore.DocumentFieldTypeString, Value: "User_" + id},
+				},
+			})
+
+			_, _ = col.Get(id)
+
+			// иногда удаляем
+			if i%3 == 0 {
+				_ = col.Delete(id)
+			}
+		}()
 	}
 
-	users.Put(doc1)
-	users.Put(doc2)
-
-	fmt.Println("LIST:")
-	for _, d := range users.List() {
-		fmt.Println("-", d.Fields["key"].Value, d.Fields["name"].Value)
-	}
-
-	deleted := users.Delete("user_2")
-	fmt.Println("DELETE user_2 ->", deleted)
-
-	_, ok := users.Get("user_2")
-	fmt.Println("GET user_2 after delete ->", ok)
+	wg.Wait()
+	fmt.Println("done; logs =", len(store.Logs()))
 }
