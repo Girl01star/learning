@@ -1,0 +1,7 @@
+services:
+  documentstore:
+    build:
+      context: ..
+      dockerfile: lesson_13/Dockerfile
+    ports:
+      - "8080:8080"
